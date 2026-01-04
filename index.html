@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>DetectX — Object Detection</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+
+<style>
+*{box-sizing:border-box}
+
+body{
+  margin:0;
+  font-family:"Inter", Arial, sans-serif;
+  color:#f9fafb;
+  background:linear-gradient(135deg,#020617,#0f172a,#1e3a8a,#7c3aed);
+  min-height:100vh;
+  overflow-x:hidden;
+}
+
+/* header wrap so waves stay attached */
+.header-wrap{
+  position:relative;
+  overflow:hidden;
+}
+
+/* animated WAVE container */
+.waves{
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:-1px;
+  width:100%;
+}
+
+/* SVG wave animation */
+.wave{
+  animation:move 9s linear infinite;
+}
+
+.wave.wave2{
+  animation-duration:12s;
+  opacity:.6;
+}
+
+.wave.wave3{
+  animation-duration:15s;
+  opacity:.35;
+}
+
+@keyframes move{
+  from{transform:translateX(0);}
+  to{transform:translateX(-50%);}
+}
+
+header{
+  text-align:center;
+  padding:44px 12px 36px;
+  position:relative;
+  z-index:2;
+}
+
+header h1{
+  margin:0 0 6px;
+  font-size:32px;
+  font-weight:800;
+}
+
+header p{
+  margin:0;
+  opacity:.85;
+  font-size:14px;
+}
+
+.badge{
+  margin-top:10px;
+  display:inline-block;
+  padding:6px 14px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.25);
+  background:linear-gradient(180deg,rgba(255,255,255,.18),rgba(255,255,255,.05));
+  font-size:12px;
+  font-weight:600;
+}
+
+/* rest of layout / cards remain same */
+.container{
+  max-width:1200px;
+  margin:28px auto 36px;
+  padding:18px;
+}
+
+.layout{
+  display:grid;
+  grid-template-columns:3fr 2fr;
+  gap:20px;
+}
+
+.card{
+  border-radius:20px;
+  background:
+    linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.02)),
+    linear-gradient(180deg,#020617dd,#02061766);
+  border:1px solid rgba(255,255,255,.14);
+  box-shadow:
+    0 30px 55px rgba(0,0,0,.4),
+    inset 0 1px 0 rgba(255,255,255,.12);
+  padding:22px;
+  position:relative;
+}
+
+.card::after{
+  content:"";
+  position:absolute;
+  inset:auto 40px -1px 40px;
+  height:2px;
+  background:linear-gradient(90deg,transparent,#38bdf8,#a78bfa,transparent);
+}
+
+.section-title{
+  font-size:14px;
+  text-transform:uppercase;
+  letter-spacing:1.2px;
+  opacity:.85;
+  margin-bottom:12px;
+}
+
+.meta{
+  text-align:center;
+  opacity:.85;
+  margin-bottom:16px;
+  font-size:13px;
+}
+
+.controls{text-align:center}
+input{margin-bottom:12px}
+
+button{
+  padding:10px 15px;
+  margin:8px 6px;
+  border:none;
+  border-radius:10px;
+  cursor:pointer;
+  font-weight:600;
+  font-size:13px;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  color:white;
+  transition:.18s;
+}
+
+button:hover{
+  transform:translateY(-1px);
+  box-shadow:0 16px 26px rgba(0,0,0,.35);
+}
+
+.open{background:linear-gradient(135deg,#34d399,#10b981);}
+.close{background:linear-gradient(135deg,#f87171,#dc2626);}
+.clear{color:#02243a;background:linear-gradient(135deg,#7dd3fc,#38bdf8);}
+.shot{background:linear-gradient(135deg,#facc15,#eab308);color:#111827;}
+.clearHistory{background:linear-gradient(135deg,#c084fc,#8b5cf6);}
+
+.viewer{text-align:center;margin-top:14px}
+video{display:none}
+
+canvas{
+  margin-top:10px;
+  border-radius:18px;
+  border:1px solid rgba(255,255,255,.25);
+  background:#020617;
+  width:100%;
+  max-width:880px;
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.06),
+    0 15px 40px rgba(0,0,0,.45),
+    0 0 40px rgba(124,58,237,.25);
+}
+
+.stats{
+  margin-top:14px;
+  text-align:center;
+  font-size:13px;
+  opacity:.9;
+}
+
+.history-title{font-size:14px;font-weight:700;margin-bottom:12px;opacity:.95;}
+.history-list{max-height:520px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;}
+
+.history-item{
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:14px;
+  padding:10px;
+  background:rgba(255,255,255,.04);
+  display:flex;
+  gap:12px;
+  align-items:center;
+}
+
+.history-thumb{
+  width:95px;
+  height:68px;
+  border-radius:10px;
+  object-fit:cover;
+  border:1px solid rgba(255,255,255,.25);
+}
+
+.history-details{font-size:12px;opacity:.9;flex:1;}
+.history-details strong{display:block;margin-bottom:3px;}
+
+.view-btn{
+  padding:6px 10px;
+  border:none;
+  border-radius:9px;
+  font-size:11px;
+  cursor:pointer;
+  background:linear-gradient(135deg,#a5b4fc,#818cf8);
+  color:#020617;
+}
+
+.loader{
+  position:fixed;
+  inset:0;
+  background:rgba(2,6,23,.95);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-direction:column;
+  gap:12px;
+  z-index:999;
+}
+
+.spinner{
+  width:36px;
+  height:36px;
+  border-radius:999px;
+  border:3px solid rgba(255,255,255,.22);
+  border-top-color:white;
+  animation:spin 1s linear infinite;
+}
+
+@keyframes spin{to{transform:rotate(360deg);}}
+
+footer{
+  text-align:center;
+  opacity:.7;
+  font-size:12px;
+  margin:20px 0 16px;
+}
+
+@media(max-width:900px){
+  .layout{grid-template-columns:1fr;}
+  canvas{max-width:100%;}
+}
+</style>
+</head>
+
+<body>
+
+<div class="header-wrap">
+
+  <header>
+    <h1>DetectX</h1>
+    <p>Real-time object detection powered by deep learning</p>
+    <div class="badge">Developed by Chandu</div>
+  </header>
+
+  <!-- Animated waves -->
+  <div class="waves">
+    <svg viewBox="0 0 1200 200" preserveAspectRatio="none" width="100%" height="120">
+      <path class="wave"
+        d="M0,120 C200,160 400,80 600,120 C800,160 1000,80 1200,120 L1200,200 L0,200 Z"
+        fill="url(#grad1)"></path>
+
+      <path class="wave wave2"
+        d="M0,130 C200,170 400,90 600,130 C800,170 1000,90 1200,130 L1200,200 L0,200 Z"
+        fill="url(#grad2)"></path>
+
+      <path class="wave wave3"
+        d="M0,140 C200,180 400,100 600,140 C800,180 1000,100 1200,140 L1200,200 L0,200 Z"
+        fill="url(#grad3)"></path>
+
+      <defs>
+        <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#2563eb"/>
+          <stop offset="100%" stop-color="#7c3aed"/>
+        </linearGradient>
+
+        <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#38bdf8"/>
+          <stop offset="100%" stop-color="#4f46e5"/>
+        </linearGradient>
+
+        <linearGradient id="grad3" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#22c55e"/>
+          <stop offset="100%" stop-color="#3b82f6"/>
+        </linearGradient>
+      </defs>
+    </svg>
+  </div>
+
+</div>
+
+<div id="loader" class="loader">
+  <div class="spinner"></div>
+  Loading AI model…
+</div>
+
+<div class="container">
+
+  <div class="layout">
+
+    <!-- MAIN -->
+    <div class="card">
+
+      <div class="section-title">Detection Panel</div>
+
+      <div class="meta">
+        CBIT • Roll No: <strong>242P1A3191</strong>
+      </div>
+
+      <div class="controls">
+        <input type="file" id="imageUpload" accept="image/*"><br>
+
+        <button class="open" onclick="openCamera()">📷 Open Camera</button>
+        <button class="close" onclick="closeCamera()">✖ Close Camera</button>
+        <button class="clear" onclick="clearImage()">🧹 Clear</button>
+        <button class="shot" onclick="takeShot()">⬇ Save Screenshot</button>
+      </div>
+
+      <div class="viewer">
+        <video id="video" width="640" height="480" autoplay></video>
+        <canvas id="canvas" width="900" height="600"></canvas>
+      </div>
+
+      <div id="stats" class="stats">Detected: —</div>
+
+    </div>
+
+    <!-- HISTORY -->
+    <div class="card">
+      <div class="section-title">Detection History</div>
+
+      <button class="clearHistory" onclick="clearHistory()">Clear History</button>
+
+      <div id="history" class="history-list"></div>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  DetectX — Object Detection System • CBIT
+</footer>
+
+<script>
+let model;
+let detectInterval=null;
+let stream=null;
+
+const CONFIDENCE_LIMIT=0.15;
+
+const video=document.getElementById("video");
+const canvas=document.getElementById("canvas");
+const ctx=canvas.getContext("2d");
+const upload=document.getElementById("imageUpload");
+const stats=document.getElementById("stats");
+const loader=document.getElementById("loader");
+const historyBox=document.getElementById("history");
+
+let historyData=[];
+let previousObjects=[];
+
+/* load model */
+cocoSsd.load().then(m=>{
+  model=m;
+  loader.style.display="none";
+});
+
+/* image upload */
+upload.addEventListener("change",e=>{
+  const img=new Image();
+  img.onload=()=>{
+    ctx.drawImage(img,0,0,canvas.width,canvas.height);
+    model.detect(img).then(draw);
+  };
+  img.src=URL.createObjectURL(e.target.files[0]);
+});
+
+/* camera */
+function openCamera(){
+  navigator.mediaDevices.getUserMedia({
+    video:{width:{ideal:1280},height:{ideal:720}}
+  }).then(s=>{
+    stream=s;
+    video.srcObject=s;
+
+    video.addEventListener("loadeddata",()=>{
+      detectInterval=setInterval(()=>{
+        ctx.drawImage(video,0,0,canvas.width,canvas.height);
+        model.detect(video).then(draw);
+      },220);
+    });
+  });
+}
+
+function closeCamera(){
+  if(detectInterval) clearInterval(detectInterval);
+  if(stream) stream.getTracks().forEach(t=>t.stop());
+  detectInterval=null;
+  stream=null;
+  video.srcObject=null;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  stats.textContent="Detected: —";
+}
+
+function clearImage(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  upload.value="";
+  stats.textContent="Detected: —";
+}
+
+function takeShot(){
+  saveToHistory(stats.textContent);
+}
+
+function saveToHistory(info){
+  const img=canvas.toDataURL("image/png");
+  const time=new Date().toLocaleTimeString();
+
+  historyData.unshift({img,info,time});
+  if(historyData.length>5) historyData.pop();
+
+  renderHistory();
+}
+
+function draw(predictions){
+  let objects=[];
+
+  predictions.forEach(p=>{
+    if(p.score<CONFIDENCE_LIMIT) return;
+
+    objects.push(p.class);
+
+    ctx.beginPath();
+    ctx.rect(...p.bbox);
+    ctx.lineWidth=2;
+    ctx.strokeStyle="#4ade80";
+    ctx.stroke();
+
+    const label=`${p.class} ${(p.score*100).toFixed(1)}%`;
+    ctx.font="14px Inter";
+    const w=ctx.measureText(label).width;
+
+    ctx.fillStyle="rgba(0,0,0,.65)";
+    ctx.fillRect(p.bbox[0],p.bbox[1]-20,w+10,20);
+
+    ctx.fillStyle="#a7f3d0";
+    ctx.fillText(label,p.bbox[0]+4,p.bbox[1]-6);
+  });
+
+  const unique=[...new Set(objects)];
+
+  stats.textContent =
+    unique.length===0
+      ? "Detected: none"
+      : `Detected: ${unique.length} — ${unique.join(", ")}`;
+
+  if(JSON.stringify(unique)!==JSON.stringify(previousObjects)){
+    if(unique.length>0) saveToHistory(stats.textContent);
+    previousObjects=unique;
+  }
+}
+
+function renderHistory(){
+  historyBox.innerHTML="";
+  historyData.forEach(h=>{
+    const div=document.createElement("div");
+    div.className="history-item";
+    div.innerHTML=`
+      <img src="${h.img}" class="history-thumb">
+      <div class="history-details">
+        <strong>${h.info}</strong>
+        ${h.time}
+      </div>
+      <button class="view-btn" onclick="downloadHistory('${h.img}')">Download</button>
+    `;
+    historyBox.appendChild(div);
+  });
+}
+
+function clearHistory(){
+  historyData=[];
+  renderHistory();
+}
+
+function downloadHistory(data){
+  const a=document.createElement("a");
+  a.href=data;
+  a.download="detectx_history.png";
+  a.click();
+}
+</script>
+</body>
+</html>
